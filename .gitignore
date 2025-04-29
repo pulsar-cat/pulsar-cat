@@ -1,0 +1,30 @@
+# macOS
+**/*.DS_Store
+
+# Visual Studio Code
+.vscode/*
+!.vscode/*.example
+.devcontainer/
+
+# JetBrains
+.idea/
+*.iml
+.fleet/
+
+# GitPod
+.gitpod.yml
+
+# build
+*.exe
+*.app
+build/
+
+# Python
+*.pyc
+venv/
+
+# Golang
+go/bin/
+
+# Rust
+target/
