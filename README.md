@@ -92,10 +92,40 @@ Read messages from a topic:
 pulsar-cat --broker pulsar://localhost:6650 consume --topic my-topic
 ```
 
+Start consuming from the beginning of the topic:
+
+```bash
+pulsar-cat --broker pulsar://localhost:6650 consume --topic my-topic --offset beginning
+```
+
+Start consuming from the end of the topic (only new messages):
+
+```bash
+pulsar-cat --broker pulsar://localhost:6650 consume --topic my-topic --offset end
+```
+
+Exit after consuming all available messages:
+
+```bash
+pulsar-cat --broker pulsar://localhost:6650 consume --topic my-topic --exit
+```
+
+Output messages in JSON format:
+
+```bash
+pulsar-cat --broker pulsar://localhost:6650 consume --topic my-topic --json
+```
+
 Format output:
 
 ```bash
 pulsar-cat --broker pulsar://localhost:6650 consume --topic my-topic --format 'Key: %k, Value: %s'
+```
+
+Combine multiple options:
+
+```bash
+pulsar-cat --broker pulsar://localhost:6650 consume --topic my-topic --offset beginning --exit --format 'Topic: %t, Key: %k, Value: %s'
 ```
 
 ### List Mode
@@ -125,13 +155,26 @@ pulsar-cat --broker pulsar+ssl://localhost:6651 consume --topic my-topic --auth_
 When using the `--format` option in consumer mode, the following placeholders are available:
 
 - `%t`: Topic name
-- `%p`: Partition
-- `%o`: Message offset
+- `%p`: Partition (message ID in Pulsar)
+- `%o`: Offset (message ID in Pulsar)
 - `%k`: Message key
 - `%s`: Message payload (string)
 - `%S`: Message payload size in bytes
 - `%h`: Message headers
 - `%T`: Message timestamp
+
+## Consumer Options
+
+The consumer mode supports these options:
+
+- `-t, --topic`: Topic to consume messages from (required)
+- `-o, --offset`: Initial position to start consuming from:
+  - `beginning`: Start from the earliest available message
+  - `end`: Start from the latest message (only consume new messages)
+- `-e, --exit`: Exit after consuming all available messages
+- `-f, --format`: Format string for message output
+- `-J, --json`: Output messages in JSON format
+- `--auth_token`: Authentication token for secured clusters
 
 ## Compression Options
 
@@ -150,6 +193,12 @@ Available compression algorithms:
 pulsar-cat --broker pulsar://localhost:6650 consume --topic my-topic
 ```
 
+### Consume all messages and exit
+
+```bash
+pulsar-cat --broker pulsar://localhost:6650 consume --topic my-topic --offset beginning --exit
+```
+
 ### Produce messages with a key
 
 ```bash
@@ -163,6 +212,12 @@ user2:{"name":"Bob","action":"search"}
 ```bash
 pulsar-cat --broker pulsar://localhost:6650 consume --topic my-topic \
   --format "Offset: %o, Key: %k, Value: %s, Time: %T"
+```
+
+### Output messages in JSON format
+
+```bash
+pulsar-cat --broker pulsar://localhost:6650 consume --topic my-topic --json
 ```
 
 ### List topics in a namespace
