@@ -48,17 +48,21 @@ pub async fn run_consume(broker: String, opts: &ConsumerOpts) -> Result<(), Puls
         println!("Press Ctrl+C to exit");
     }
 
-    // Keep track of message count for early exit
     let early_exit = opts.exit;
-    // Keep track of time since last message for early exit
-    let mut no_messages_count = 0;
-    // Track if this is the first message attempt (for empty topic check)
-    let mut is_first_attempt = true;
+
+    // Add time tracking for early exit detection
+    let mut last_message_time = SystemTime::now();
+    let mut got_at_least_one_message = false;
+
+    // Use a shorter timeout for faster detection of end of stream
+    const TIMEOUT_DURATION: Duration = Duration::from_millis(300);
+    // Define the maximum idle time before considering the stream finished
+    const MAX_IDLE_TIME: Duration = Duration::from_millis(1000);
 
     // For empty topics with early exit, check for messages immediately with a timeout
     if early_exit {
         // Use a short timeout for the first message check
-        match timeout(Duration::from_millis(1000), consumer.try_next()).await {
+        match timeout(TIMEOUT_DURATION, consumer.try_next()).await {
             // Timeout on first attempt indicates an empty topic
             Err(_) => {
                 if !opts.display.json {
@@ -79,6 +83,9 @@ pub async fn run_consume(broker: String, opts: &ConsumerOpts) -> Result<(), Puls
             Ok(result) => match result {
                 // Found a message, process normally
                 Ok(Some(msg)) => {
+                    got_at_least_one_message = true;
+                    last_message_time = SystemTime::now();
+
                     // Process the message
                     let payload = msg.payload.data.as_ref();
                     let message_id = msg.message_id.clone();
@@ -151,36 +158,53 @@ pub async fn run_consume(broker: String, opts: &ConsumerOpts) -> Result<(), Puls
                 }
             },
         }
-
-        // First attempt handled, continue with normal loop
-        is_first_attempt = false;
     }
 
     // Main consumption loop with a way to exit on Ctrl+C
     loop {
-        // If early exit is enabled, use a timeout to detect when no more messages are available
-        let next_message = if early_exit && !is_first_attempt {
-            // Use a shorter timeout after we've seen some messages
-            timeout(Duration::from_millis(500), consumer.try_next()).await
+        // Always use a timeout when early_exit is enabled to detect end of stream
+        let next_message = if early_exit {
+            timeout(TIMEOUT_DURATION, consumer.try_next()).await
         } else {
-            // Normal operation without timeout (wrapped to match type)
             Ok(consumer.try_next().await)
         };
 
-        // No longer the first attempt
-        is_first_attempt = false;
+        // Check if we've been idle too long and should exit
+        if early_exit && got_at_least_one_message {
+            let idle_time = SystemTime::now()
+                .duration_since(last_message_time)
+                .unwrap_or(Duration::from_secs(0));
+            if idle_time > MAX_IDLE_TIME {
+                if !opts.display.json {
+                    println!(
+                        "No new messages received for {} ms, exiting...",
+                        idle_time.as_millis()
+                    );
+                }
+                break;
+            }
+        }
 
         tokio::select! {
             // Handle the next message (potentially with timeout)
-            result = async { next_message }, if next_message.is_ok() => {
+            result = async { next_message } => {
                 match result {
-                    // Timeout occurred - no more messages available in timeout period
+                    // Timeout occurred - check if we should exit
                     Err(_) if early_exit => {
-                        no_messages_count += 1;
-                        // Exit after a few timeouts to ensure we're really at the end
-                        if no_messages_count >= 2 {
+                        // If we've already received at least one message and hit a timeout,
+                        // it's likely we've reached the end
+                        if got_at_least_one_message {
+                            let idle_time = SystemTime::now().duration_since(last_message_time).unwrap_or(Duration::from_secs(0));
+                            if idle_time > MAX_IDLE_TIME / 2 {
+                                if !opts.display.json {
+                                    println!("No more messages available after timeout, exiting...");
+                                }
+                                break;
+                            }
+                        } else {
+                            // If we haven't received any messages yet, exit after a few timeouts
                             if !opts.display.json {
-                                println!("No more messages available, exiting...");
+                                println!("No messages available after timeout, exiting...");
                             }
                             break;
                         }
@@ -189,8 +213,9 @@ pub async fn run_consume(broker: String, opts: &ConsumerOpts) -> Result<(), Puls
                     Ok(consumer_result) => {
                         match consumer_result {
                             Ok(Some(msg)) => {
-                                // Reset the no messages counter since we received a message
-                                no_messages_count = 0;
+                                // Update time tracking for early exit detection
+                                got_at_least_one_message = true;
+                                last_message_time = SystemTime::now();
 
                                 // Access message data
                                 let payload = msg.payload.data.as_ref();
@@ -250,8 +275,12 @@ pub async fn run_consume(broker: String, opts: &ConsumerOpts) -> Result<(), Puls
                             }
                         }
                     },
-                    // This shouldn't happen since we guard against it in the select condition
-                    _ => unreachable!(),
+                    // This shouldn't happen since select will choose available branches
+                    _ => {
+                        if early_exit {
+                            break;
+                        }
+                    },
                 }
             },
 
@@ -260,6 +289,17 @@ pub async fn run_consume(broker: String, opts: &ConsumerOpts) -> Result<(), Puls
                     println!("Received Ctrl+C, shutting down consumer...");
                 }
                 break;
+            }
+
+            // Add a periodic timeout check to ensure we exit if no progress
+            _ = tokio::time::sleep(Duration::from_millis(500)), if early_exit && got_at_least_one_message => {
+                let idle_time = SystemTime::now().duration_since(last_message_time).unwrap_or(Duration::from_secs(0));
+                if idle_time > MAX_IDLE_TIME {
+                    if !opts.display.json {
+                        println!("No new messages received for {} ms, exiting...", idle_time.as_millis());
+                    }
+                    break;
+                }
             }
         }
     }
