@@ -43,15 +43,32 @@ enum AuthMethod {
     Token,
 }
 
+#[derive(ValueEnum, Debug, Clone)]
+pub enum OffsetPosition {
+    #[value(alias = "beginning")]
+    Beginning,
+    #[value(alias = "end")]
+    End,
+}
+
 #[derive(Args, Debug, Clone)]
 pub struct DisplayOpts {
     #[arg(
         short = 'f',
         long = "format",
         required = false,
-        help = "Format to display messages in"
+        help = "Format to display messages in. Placeholders: %t=topic, %p=partition, %o=offset, %k=key, %s=payload, %S=size, %h=headers, %T=timestamp"
     )]
-    format: Option<String>,
+    pub format: Option<String>,
+
+    #[arg(
+        short = 'J',
+        long = "json",
+        required = false,
+        help = "Output in JSON format",
+        default_value = "false"
+    )]
+    pub json: bool,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -86,15 +103,6 @@ pub struct ProducerOpts {
         help = "Topic to produce messages to, should be in the format of 'tenant/namespace/topic'"
     )]
     pub topic: String,
-
-    #[arg(
-        short = 'p',
-        long = "partition",
-        required = false,
-        help = "Partition to produce messages to, should be a number.
-            Return error if partition is not a number or is not in the range of partitions."
-    )]
-    pub partition: Option<u32>,
 
     #[arg(
         long = "compression",
@@ -140,7 +148,24 @@ pub struct ConsumerOpts {
         required = true,
         help = "Topic to consume messages from, should be in the format of 'tenant/namespace/topic'"
     )]
-    topic: String,
+    pub topic: String,
+
+    #[arg(
+        short = 'o',
+        long = "offset",
+        required = false,
+        help = "Offset to start consuming from: 'beginning' or 'end'"
+    )]
+    pub offset: Option<OffsetPosition>,
+
+    #[arg(
+        short = 'e',
+        long = "exit",
+        required = false,
+        help = "Exit after consuming the last message",
+        default_value = "false"
+    )]
+    pub exit: bool,
 
     #[command(flatten)]
     pub auth: AuthOpts,

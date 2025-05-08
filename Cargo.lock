@@ -2024,6 +2024,8 @@ dependencies = [
  "flate2",
  "futures",
  "pulsar",
+ "serde",
+ "serde_json",
  "thiserror",
  "tokio",
 ]
