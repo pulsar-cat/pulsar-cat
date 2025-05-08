@@ -9,7 +9,7 @@ use clap::Parser;
 use cli_options::{CliOpts, OpMode};
 use error::PulsarCatError;
 
-use crate::op::{run_list, run_produce, run_consume};
+use crate::op::{run_consume, run_list, run_produce};
 
 #[tokio::main]
 async fn main() -> Result<(), PulsarCatError> {
