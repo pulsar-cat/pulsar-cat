@@ -9,7 +9,7 @@ use clap::Parser;
 use cli_options::{CliOpts, OpMode};
 use error::PulsarCatError;
 
-use crate::op::{run_list, run_produce};
+use crate::op::{run_consume, run_list, run_produce};
 
 #[tokio::main]
 async fn main() -> Result<(), PulsarCatError> {
@@ -30,7 +30,11 @@ async fn run(cli_opts: &CliOpts) -> Result<(), PulsarCatError> {
             let produce_opts = produce_opts.clone();
             tokio::spawn(async move { run_produce(broker, &produce_opts).await })
         }
-        _ => unimplemented!(),
+        OpMode::Consumer(consume_opts) => {
+            let broker = cli_opts.broker.clone();
+            let consume_opts = consume_opts.clone();
+            tokio::spawn(async move { run_consume(broker, &consume_opts).await })
+        }
     };
 
     select! {
